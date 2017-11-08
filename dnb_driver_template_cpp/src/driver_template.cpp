@@ -84,7 +84,13 @@ void DriverTemplate::spin(){
 
                 robot_movement_interface::Result result_msg;
                 result_msg.command_id = command_list_launched[command_list_launched.size() - 1].command_id;
-                result_msg.result_code = 0;
+                // Check if the robot was correctly finished. If the commands finished correctly, then result_code is 0
+                // if not finishes correctly, result_code must be -1
+                if (DriverTemplate::in_error()){
+                    result_msg.result_code = -1;
+                } else {
+                    result_msg.result_code = 0;
+                }
                 pub_command_result.publish(result_msg);
             }
 
@@ -273,6 +279,12 @@ void DriverTemplate::halt_motion(){
     while(!DriverTemplate::is_stopped()){
         DriverTemplate::stop_motion();
     }
+}
+
+bool DriverTemplate::in_error(){
+    // <!> This function needs to return if robot is in error state or not
+    // This can be implemented through a global state variable which is updated after each status message
+    return false;
 }
 
 tf::Pose DriverTemplate::get_current_robot_pose(){

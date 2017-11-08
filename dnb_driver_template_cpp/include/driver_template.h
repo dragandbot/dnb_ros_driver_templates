@@ -94,6 +94,7 @@ class DriverTemplate {
         void stop_motion();
         bool is_stopped();
         void halt_motion();
+        bool in_error();
         tf::Pose get_current_robot_pose();
         tf::Pose get_current_waypoint();
 

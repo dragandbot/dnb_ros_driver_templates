@@ -19,10 +19,6 @@
 #ifndef DRIVER_TEMPLATE_H_
 #define DRIVER_TEMPLATE_H_
 
-#include <thread>
-#include <mutex>
-#include <atomic>
-
 #include <string.h>
 
 #include <tf/tf.h>
@@ -61,9 +57,8 @@ class DriverTemplate {
         float speed_factor;
         std::deque<robot_movement_interface::Command> command_list;
         std::deque<robot_movement_interface::Command> command_list_launched;
-        std::mutex command_list_mutex;
 
-        std::atomic<bool> restart_requested;
+        bool restart_requested;
 
         /*
          * ROS Publishers, Subscribers and ServiceServers
@@ -98,13 +93,13 @@ class DriverTemplate {
         void start_motion(IndividualCommandTemplate &indiv_command);
         void stop_motion();
         bool is_stopped();
+        void halt_motion();
         tf::Pose get_current_robot_pose();
         tf::Pose get_current_waypoint();
 
         /*
          * Other functions
          */
-        static void cb_thread();
         void publish();
 
 

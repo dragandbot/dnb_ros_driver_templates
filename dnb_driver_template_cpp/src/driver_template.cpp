@@ -54,11 +54,8 @@ DriverTemplate::~DriverTemplate(){
 void DriverTemplate::spin(){
     ros::Rate loop_rate(100);
 
-    std::thread cbthread (DriverTemplate::cb_thread);
-
     while(ros::ok()){
         // launch new commands
-        command_list_mutex.lock();
         if (command_list.size() > 0){
             // process the new movement command
             IndividualCommandTemplate indiv_command = DriverTemplate::processCommand(command_list[0]);
@@ -74,46 +71,48 @@ void DriverTemplate::spin(){
 
         if (command_list_launched.size() > 0){
             // check whether the current waypoint was reached
-            // <!> disable this function if your controller does not provide the current target waypoint pose
+            // <!> disable this function if your controller does not provide the current target waypoint pose (see get_current_waypoint() function below for further information)
+            // <disable_begin>
             if (rmi_lib::reachedWaypointByChangingTarget(rmi_lib::arrayToPoseTF(command_list_launched[0].pose), DriverTemplate::get_current_waypoint())){
                 command_list_launched.pop_front();
             }
+            // <disable_end>
 
+            // check, whether the robot is stopped. This indicates, whether the current trajectory has been completed.
             if (DriverTemplate::is_stopped()){
                 command_list_launched.clear();
 
                 robot_movement_interface::Result result_msg;
-                result_msg.command_id = command_list_launched[0].command_id;
+                result_msg.command_id = command_list_launched[command_list_launched.size() - 1].command_id;
                 result_msg.result_code = 0;
                 pub_command_result.publish(result_msg);
             }
 
             // check for a restart
-            // <!> disable this function if your controller does not provide the current target waypoint pose
+            // <!> disable this function if your controller does not provide the current target waypoint pose (see get_current_waypoint() function below for further information)
+            // <disable_begin>
             if (restart_requested){
+                // stop the currently pending movement commands; it is not necessary to speed the robot down to zero
                 DriverTemplate::stop_motion();
+
+                // restart all already and not still completed movement commands
                 for (size_t i = 0; i < command_list_launched.size(); i++){
                     // process the movement command
                     IndividualCommandTemplate indiv_command = DriverTemplate::processCommand(command_list_launched[i]);
 
                     // start the movement command
                     DriverTemplate::start_motion(indiv_command);
+                    restart_requested = false;
                 }
             }
+            // <disable_end>
         }
-        command_list_mutex.unlock();
 
         DriverTemplate::publish();
-
+        ros::spinOnce();
         loop_rate.sleep();
     }
-
-    cbthread.join();
     delete this;
-}
-
-void DriverTemplate::cb_thread(){
-    ros::spin();
 }
 
 void DriverTemplate::publish(){
@@ -136,17 +135,7 @@ void DriverTemplate::publish(){
     }
 
     // Tool frame
-    robot_movement_interface::EulerFrame tool_frame;
-
-    // <!> Fill here the current values of the tool frame (here in pseudo code)
-    /*
-     * tool_frame.x = TOOL_POSE_X;
-     * tool_frame.y = TOOL_POSE_Y;
-     * tool_frame.z = TOOL_POSE_Z;
-     * tool_frame.alpha = TOOL_POSE_ALPHA;
-     * tool_frame.beta = TOOL_POSE_BETA;
-     * tool_frame.gamma = TOOL_POSE_GAMMA;
-     */
+    robot_movement_interface::EulerFrame tool_frame = rmi_lib::poseTFToEuler(DriverTemplate::get_current_robot_pose());
     pub_tool_frame.publish(tool_frame);
 
     // Robot status
@@ -172,8 +161,8 @@ bool DriverTemplate::callback_stop_robot(std_srvs::Trigger::Request &req, std_sr
     command_list.clear();
     command_list_launched.clear();
 
-    // stop robot and delete all pending movement commands
-    DriverTemplate::stop_motion();
+    // stop robot and delete all pending movement commands; it is absolutely necessary to speed the robot down to zero
+    DriverTemplate::halt_motion();
 
     res.success = true;
     return true;
@@ -182,30 +171,19 @@ bool DriverTemplate::callback_stop_robot(std_srvs::Trigger::Request &req, std_sr
 void DriverTemplate::callback_rmi_command(const robot_movement_interface::CommandListConstPtr &msg) {
     ROS_INFO_NAMED("driver", "rmi request received");
 
-    if (!msg->replace_previous_commands){
-        // if we don't replace, we need to wait until the command is finished
-        while (command_list.size() > 0 || command_list_launched.size() > 0) {
-            // wait until stopped
-            usleep(100);
-        }
-    } else {
+    // if we replace the commands discard all movement commands and stop the robot first
+    if (msg->replace_previous_commands){
         command_list.clear();
         command_list_launched.clear();
 
-        // stop robot and delete all pending movement commands
+        // stop robot and delete all pending movement commands; it is not necessary to speed the robot down to zero
         DriverTemplate::stop_motion();
     }
 
-    // build new command list
-    command_list_mutex.lock();
-
-    command_list.clear();
-    command_list_launched.clear();
+    // build new command list by appending it to the current commands
     for (int i = 0; i < msg->commands.size(); i++) {
         command_list.push_back(msg->commands[i]);
     }
-
-    command_list_mutex.unlock();
 }
 
 // This service sets an IO from ROS. This will stop the robot because replace the current command list
@@ -242,6 +220,7 @@ bool DriverTemplate::callback_scale_speed(robot_movement_interface::SetFloat::Re
     } else if (req.value == 0.0){
         ROS_WARN_NAMED("driver", "Scale speed=0.0%% is out of bounds. Robot stops and cancels movement queue!");
 
+        // stop the currently pending movement commands; it is not necessary to speed the robot down to zero
         DriverTemplate::stop_motion();
 
         return true;
@@ -272,17 +251,28 @@ IndividualCommandTemplate DriverTemplate::processCommand(robot_movement_interfac
 
 void DriverTemplate::start_motion(IndividualCommandTemplate &indiv_command){
     // <!> Put here your code to execute a not-already running individual movement command.
+    // This function should just send the command to the robot controller, where it is queued with the others and processed one after another
     // The function is expected to be non-blocking during the movement.
 }
 
 void DriverTemplate::stop_motion(){
-    // <!> Put here your code to stop the robot to standstill
-    // All pending movement commands should be discarded in the robot controller.
+    // <!> Put here your code to stop all pending movement commands in the robot controller.
+    // The robot doesn't have to be at standstill, when leaving this function.
 }
 
 bool DriverTemplate::is_stopped(){
     // <!> Put here your code to check, whether the robot is stoppped or not.
     // The controller is then supposed to have no more pending movement commands.
+    // The robot is then supposed to have it's velocities near to zero.
+}
+
+void DriverTemplate::halt_motion(){
+    // <!> Modify this function to stop the robot to standstill if necessary
+    // All pending movement commands should be discarded in the robot controller.
+    // The robot should be at standstill, when leaving this function.
+    while(!DriverTemplate::is_stopped()){
+        DriverTemplate::stop_motion();
+    }
 }
 
 tf::Pose DriverTemplate::get_current_robot_pose(){
@@ -290,7 +280,11 @@ tf::Pose DriverTemplate::get_current_robot_pose(){
 }
 
 tf::Pose DriverTemplate::get_current_waypoint(){
-    // <!> Put here the current waypoint pose (tool_pose in world coordiantes) sent by the controller
+    // <!> Put here the current waypoint pose the robot currently drives to (tool_pose in world coordiantes) sent by the controller.
+    // All waypoints of a trajectory are sent to the robot controller with start_motion commands and then processed one after another.
+    // When the robot processes the trajectory, it steps through all waypoints. The robot discards the current waypoint and continues with the next one, when he reached the first waypoint's position.
+    // If your controller does not provide the current waypoint, the driver can't pause the motion and resume it later with the last reached waypoint.
+    // In this case leave the function empty or delete it and comment or remove the 'reachedWaypointByChangingTarget' and 'restart_requested' section in the 'spin()' function.
 }
 
 // ##################################################################################################################################################

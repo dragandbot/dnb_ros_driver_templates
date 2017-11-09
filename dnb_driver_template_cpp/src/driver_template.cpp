@@ -18,7 +18,12 @@
 
 #include <driver_template.h>
 
+bool DriverTemplate::shutdown_requested = false;
+
 DriverTemplate::DriverTemplate() {
+
+    // initialize shutdown signal handler
+    signal((int) SIGINT, DriverTemplate::shutdownSignal);
 
     /*
      * initialize ROS Publishers, Subscribers and ServiceServers
@@ -43,18 +48,24 @@ DriverTemplate::DriverTemplate() {
 
 
     DriverTemplate::connectRobot();
-
     ROS_INFO_NAMED("driver", "driver initialized");
 }
 
 DriverTemplate::~DriverTemplate(){
+    ROS_INFO_NAMED("driver", "driver shutdown");
     DriverTemplate::disconnectRobot();
+    command_list.clear();
+    command_list_launched.clear();
+}
+
+void DriverTemplate::shutdownSignal(int signal){
+    shutdown_requested = true;
 }
 
 void DriverTemplate::spin(){
     ros::Rate loop_rate(100);
 
-    while(ros::ok()){
+    while(ros::ok() && !shutdown_requested){
         // launch new commands
         if (command_list.size() > 0){
             // process the new movement command
@@ -118,7 +129,6 @@ void DriverTemplate::spin(){
         ros::spinOnce();
         loop_rate.sleep();
     }
-    delete this;
 }
 
 void DriverTemplate::publish(){
@@ -243,10 +253,12 @@ bool DriverTemplate::callback_scale_speed(robot_movement_interface::SetFloat::Re
 
 void DriverTemplate::connectRobot(){
     // <!> Put here your code to connect the robot to the driver
+    ROS_INFO_NAMED("driver", "driver connected");
 }
 
 void DriverTemplate::disconnectRobot(){
     // <!> Put here your code to disconnect the robot from the driver
+    ROS_INFO_NAMED("driver", "driver disconnected");
 }
 
 IndividualCommandTemplate DriverTemplate::processCommand(robot_movement_interface::Command &command) {

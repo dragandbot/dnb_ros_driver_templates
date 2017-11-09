@@ -20,6 +20,7 @@
 #define DRIVER_TEMPLATE_H_
 
 #include <string.h>
+#include <signal.h>
 
 #include <tf/tf.h>
 #include <ros/ros.h>
@@ -59,6 +60,7 @@ class DriverTemplate {
         std::deque<robot_movement_interface::Command> command_list_launched;
 
         bool restart_requested;
+        static bool shutdown_requested;
 
         /*
          * ROS Publishers, Subscribers and ServiceServers
@@ -102,6 +104,7 @@ class DriverTemplate {
          * Other functions
          */
         void publish();
+        static void shutdownSignal(int signal);
 
 
 };

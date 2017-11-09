@@ -12,12 +12,13 @@ from industrial_msgs.msg import RobotStatus
 from collections import deque
 from dnb_rmi_library.rmi_lib import RMILib
 
-import individual_command_template
+import individual_command_template as ict
 
 command_list = deque()
 command_list_launched = deque()
 restart_requested = False
 lock_commandlist = thread.allocate_lock()
+speed_factor = 1.0
 
 def spin():
     global command_list
@@ -88,7 +89,7 @@ def callback_rmi_command(msg):
 
     with lock_commandlist:
         # if we replace the commands discard all movement commands and stop the robot first
-        if (msg.replace_previous_commands == True):
+        if (msg.replace_previous_commands):
             command_list.clear()
             command_list_launched.clear()
 
@@ -193,11 +194,11 @@ def disconnectRobot():
     pass
 
 def processCommand(rmi_command):
-    indiv_command = IndividualCommandTemplate()
+    indiv_command = ict.IndividualCommandTemplate()
     # <!> Adjust here the general movement command to your individual movement controller command
     return indiv_command
 
-def start_motion():
+def start_motion(indiv_command):
     # <!> Put here your code to execute a not-already running individual movement command.
     # This function should just send the command to the robot controller, where it is queued with the others and processed one after another
     # The function is expected to be non-blocking during the movement.

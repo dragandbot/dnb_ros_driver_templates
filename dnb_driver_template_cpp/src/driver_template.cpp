@@ -112,7 +112,7 @@ void DriverTemplate::spin(){
                 // stop the currently pending movement commands; it is not necessary to speed the robot down to zero
                 DriverTemplate::stop_motion();
 
-                // restart all already and not still completed movement commands
+                // restart all already launched and not still completed movement commands
                 for (size_t i = 0; i < command_list_launched.size(); i++){
                     // process the movement command
                     IndividualCommandTemplate indiv_command = DriverTemplate::processCommand(command_list_launched[i]);

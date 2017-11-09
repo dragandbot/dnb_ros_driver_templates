@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import rospy
-import tf
+import thread
 
 from robot_movement_interface.msg import *
 from robot_movement_interface.srv import *
+from geometry_msgs.msg import Pose, Vector3, Quaternion
 from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger, TriggerResponse
 from industrial_msgs.msg import RobotStatus
@@ -16,6 +17,7 @@ import individual_command_template
 command_list = deque()
 command_list_launched = deque()
 restart_requested = False
+lock_commandlist = thread.allocate_lock()
 
 def spin():
     global command_list
@@ -26,48 +28,55 @@ def spin():
     loop_rate = rospy.Rate(100)
     while not rospy.is_shutdown():
         if (len(command_list) > 0):
-            # process the new movement command
-            indiv_command = processCommand(command_list[0])
+            with lock_commandlist:
+                # process the new movement command
+                indiv_command = processCommand(command_list[0])
 
-            # start the new movement command
-            start_motion(indiv_command)
+                # start the new movement command
+                start_motion(indiv_command)
 
-            # move the command from the open list to the launched list
-            command_list_launched.append(command_list.popleft())
+                # move the command from the open list to the launched list
+                command_list_launched.append(command_list.popleft())
 
         if (len(command_list_launched) > 0):
-            # check whether the current waypoint was reached
-            # <!> disable this function if your controller does not provide the current target waypoint pose (see get_current_waypoint() function below for further information)
-            # <disable_begin>
-            if (rmi_lib.reachedWaypointByChangingTarget(rmi_lib.arrayToPoseTF(command_list_launched[0].pose), get_current_waypoint())):
-                command_list_launched.popfront()
-            # <disable_end>
+            with lock_commandlist:
+                # check whether the current waypoint was reached
+                # <!> disable this function if your controller does not provide the current target waypoint pose (see get_current_waypoint() function below for further information)
+                # <disable_begin>
+                if (RMILib.reachedWaypointByChangingTarget(RMILib.arrayToPoseGeo(command_list_launched[0].pose), get_current_waypoint())):
+                    command_list_launched.popfront()
+                # <disable_end>
 
-            # check, whether the robot is stopped. This indicates, whether the current trajectory has been completed.
-            if (is_stopped()):
-                command_list_launched.clear()
+                # check, whether the robot is stopped. This indicates, whether the current trajectory has been completed.
+                if (is_stopped()):
+                    command_list_launched.clear()
 
-            result_msg = Result()
-            result_msg.command_id = command_list_launched[-1].command_id
-            result_msg.result_code = 0
-            pub_command_result.publish(result_msg)
+                result_msg = Result()
+                result_msg.command_id = command_list_launched[-1].command_id
+                # check if the robot was correctly finished. If the commands finished correctly, then result_code is 0
+                # if not finishes correctly, result_code must be -1
+                if (in_error()):
+                    result_msg.result_code = -1
+                else:
+                    result_msg.result_code = 0
+                pub_command_result.publish(result_msg)
 
-            # check for a restart
-            # <!> disable this function if your controller does not provide the current target waypoint pose (see get_current_waypoint() function below for further information)
-            # <disable_begin>
-            if (restart_requested):
-                # stop the currently pending movement commands; it is not necessary to speed the robot down to zero
-                stop_motion()
+                # check for a restart
+                # <!> disable this function if your controller does not provide the current target waypoint pose (see get_current_waypoint() function below for further information)
+                # <disable_begin>
+                if (restart_requested):
+                    # stop the currently pending movement commands; it is not necessary to speed the robot down to zero
+                    stop_motion()
 
-                # restart all already and not still completed movement commands
-                for cmd in command_list_launched:
-                    # process the movement command
-                    indiv_command = processCommand(cmd)
+                    # restart all already launched and not still completed movement commands
+                    for cmd in command_list_launched:
+                        # process the movement command
+                        indiv_command = processCommand(cmd)
 
-                    # start the movement command
-                    start_motion(indiv_command)
-                    restart_requested = False
-            # <disable_end>
+                        # start the movement command
+                        start_motion(indiv_command)
+                        restart_requested = False
+                # <disable_end>
 
         publish()
         loop_rate.sleep()
@@ -77,17 +86,18 @@ def callback_rmi_command(msg):
     global command_list_launched
     rospy.loginfo("[driver] rmi request received")
 
-    # if we replace the commands discard all movement commands and stop the robot first
-    if (msg.replace_previous_commands == True):
-        command_list.clear()
-        command_list_launched.clear()
+    with lock_commandlist:
+        # if we replace the commands discard all movement commands and stop the robot first
+        if (msg.replace_previous_commands == True):
+            command_list.clear()
+            command_list_launched.clear()
 
-    # stop robot and delete all pending movement commands; it is not necessary to speed the robot down to zero
-    stop_motion()
+        # stop robot and delete all pending movement commands; it is not necessary to speed the robot down to zero
+        stop_motion()
 
-    # build new command list by appending it to the current commands
-    for cmd in msg.commands:
-        command_list.append(cmd)
+        # build new command list by appending it to the current commands
+        for cmd in msg.commands:
+            command_list.append(cmd)
 
 def callback_get_io(req):
     # <!> Get here your io's and write it to the service message (here in pseudo code)
@@ -104,12 +114,13 @@ def callback_stop_robot(req):
     global command_list_launched
     rospy.loginfo("[driver] stop robot request received")
 
-    # cancel current command list
-    command_list.clear()
-    command_list_launched.clear()
+    with lock_commandlist:
+        # cancel current command list
+        command_list.clear()
+        command_list_launched.clear()
 
-    #stop robot and delete all pending movement commands; it is absolutely necessary to speed the robot down to zero
-    halt_motion()
+        #stop robot and delete all pending movement commands; it is absolutely necessary to speed the robot down to zero
+        halt_motion()
 
     return TriggerResponse(True, "")
 
@@ -155,7 +166,7 @@ def publish():
         pub_joint_states.publish(jointState)
 
     # Tool frame
-    tool_frame = RMILib.poseTFToEuler(get_current_robot_pose())
+    tool_frame = RMILib.poseGeoToEuler(get_current_robot_pose())
     pub_tool_frame.publish(tool_frame)
 
     # Robot status
@@ -173,10 +184,12 @@ def publish():
 
 def connectRobot():
     # <!> Put here your code to connect the robot to the driver
+    rospy.loginfo("[driver] robot connected")
     pass
 
 def disconnectRobot():
     # <!> Put here your code to disconnect the robot from the driver
+    rospy.loginfo("[driver] robot disconnected")
     pass
 
 def processCommand(rmi_command):
@@ -208,19 +221,24 @@ def halt_motion():
     while not is_stopped():
         stop_motion()
 
+def in_error():
+    # <!> This function needs to return if robot is in error state or not
+    # This can be implemented through a global state variable which is updated after each status message
+    pass
+
 def get_current_robot_pose():
-    current_robot_pose = tf.Pose()
+    current_robot_pose = Pose()
     # <!> Put here the current robot pose (tool_pose in world coordiantes) sent by the controller
-    return pose
+    return current_robot_pose
 
 def get_current_waypoint():
-    current_waypoint_pose = tf.Pose()
+    current_waypoint_pose = Pose()
     # <!> Put here the current waypoint pose the robot currently drives to (tool_pose in world coordiantes) sent by the controller.
     # All waypoints of a trajectory are sent to the robot controller with start_motion commands and then processed one after another.
     # When the robot processes the trajectory, it steps through all waypoints. The robot discards the current waypoint and continues with the next one, when he reached the first waypoint's position.
     # If your controller does not provide the current waypoint, the driver can't pause the motion and resume it later with the last reached waypoint.
     # In this case leave the function empty or delete it and comment or remove the 'reachedWaypointByChangingTarget' and 'restart_requested' section in the 'spin()' function.
-    return pose
+    return current_waypoint_pose
 
 if __name__ == '__main__':
     global pub_command_result
@@ -238,4 +256,9 @@ if __name__ == '__main__':
     pub_joint_states = rospy.Publisher('joint_states', JointState, queue_size = 1)
     pub_tool_frame = rospy.Publisher('tool_frame', EulerFrame, queue_size = 1)
     pub_robot_status = rospy.Publisher('robot_status', RobotStatus, queue_size = 1)
+
+    rospy.loginfo("[driver] diver initialized")
+    connectRobot()
     spin()
+    disconnectRobot()
+    rospy.loginfo("[driver] diver shutdown")

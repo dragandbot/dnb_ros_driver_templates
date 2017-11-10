@@ -9,13 +9,12 @@ from geometry_msgs.msg import Pose, Vector3, Quaternion
 from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger, TriggerResponse
 from industrial_msgs.msg import RobotStatus
-from collections import deque
 from dnb_rmi_library.rmi_lib import RMILib
 
 import individual_command_template as ict
 
-command_list = deque()
-command_list_launched = deque()
+command_list = []
+command_list_launched = []
 restart_requested = False
 lock_commandlist = thread.allocate_lock()
 speed_factor = 1.0
@@ -37,7 +36,7 @@ def spin():
                 start_motion(indiv_command)
 
                 # move the command from the open list to the launched list
-                command_list_launched.append(command_list.popleft())
+                command_list_launched.append(command_list.pop(0))
 
         if (len(command_list_launched) > 0):
             with lock_commandlist:
@@ -45,7 +44,7 @@ def spin():
                 # <!> disable this function if your controller does not provide the current target waypoint pose (see get_current_waypoint() function below for further information)
                 # <disable_begin>
                 if (RMILib.reachedWaypointByChangingTarget(RMILib.arrayToPoseGeo(command_list_launched[0].pose), get_current_waypoint())):
-                    command_list_launched.popfront()
+                    command_list_launched.pop(0)
                 # <disable_end>
 
                 # check, whether the robot is stopped. This indicates, whether the current trajectory has been completed.

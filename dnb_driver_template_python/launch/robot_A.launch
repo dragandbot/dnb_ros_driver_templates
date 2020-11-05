@@ -6,10 +6,12 @@
 	-->
 
 	<!-- Start Control Panel driver -->
+	<!--
 	<include file="$(find dnb_remote_robot_control)/launch/start_v2.launch">
 		<arg name="package" value="dnb_driver_template_python"/>
 		<arg name="sim" value="false"/>
 		<arg name="robot" value="robot_A"/>
 		<arg name="tool_frame" value="robot_state_tcp" />
 	</include>
+	-->
 </launch>

@@ -1,0 +1,23 @@
+package: dnb_driver_template_cpp
+name: "Template Robot C++"
+description: "Template Robot C++"
+type: driver/robot/template/cpp
+roslaunch: start.launch
+configuration:
+  - id: ip
+    namespace: ''
+    name: 'IP'
+    description: 'The IP address of the robot'
+    datatype: string
+    default: 192.168.0.100
+  - id: robot_model
+    name: 'Robot Model'
+    description: 'The robot model to configure visualization and settings.'
+    namespace: ''
+    datatype: select
+    available: ['A', 'B', '-']
+    default: 'A'
+nodes:
+  - node_callerid: /template_driver
+    type: driver_template_node
+status_topic: /template_driver/status

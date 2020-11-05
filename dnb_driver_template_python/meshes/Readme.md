@@ -1,0 +1,1 @@
+Place the meshes for different robot variants in this directory. They are loaded with the urdf.

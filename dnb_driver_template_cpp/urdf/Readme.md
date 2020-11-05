@@ -1,0 +1,1 @@
+Place the urdfs for different robot variants in this directory. Don't forget to load them in the launchfile.

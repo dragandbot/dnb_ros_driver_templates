@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<launch>
+
+	<arg name="ip" default="192.168.0.1"/>
+	<arg name="robot_model" default="-"/>
+
+	<rosparam command="delete" param="robot_config" />
+	<rosparam command="delete" param="robot_description" />
+
+	<!-- Load Robot Individual Settings and Model -->
+	<include if="$(eval arg('robot_model') == 'A')" file="$(find dnb_driver_template_python)/launch/robot_A.launch"/>
+	<include if="$(eval arg('robot_model') == 'B')" file="$(find dnb_driver_template_python)/launch/robot_B.launch"/>
+	<include if="$(eval arg('robot_model') == '-')" file="$(find dnb_driver_template_python)/launch/robot_generic.launch"/>
+
+	<!-- Robot Driver -->
+	<node name="template_driver" pkg="dnb_driver_template_python" type="driver_template.py" output="screen">
+		<param name="ip" value="$(arg ip)"/>
+	</node>
+
+	<!-- Robot state publisher -->
+	<node unless="$(eval arg('robot_model') == '-')" name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />
+
+	<!-- Static Transform Publishers -->
+	<!-- URDF is placed at base_link -->
+	<node name="stfp_robot_base_to_base_link" pkg="tf" type="static_transform_publisher" args="0 0 0 0 0 0 robot_base base_link 100" />
+	<!-- robot itself is placed at manufacturer_base (used for all calculations) -->
+	<node name="stfp_robot_base_to_manufacturer_base" pkg="tf" type="static_transform_publisher" args="0 0 0 0 0 0 robot_base manufacturer_base 100" />
+</launch>

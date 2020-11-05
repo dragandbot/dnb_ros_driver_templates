@@ -1,0 +1,79 @@
+######################################
+##          Robot Generic           ##
+######################################
+
+# Step translation
+step_translation: 0.05
+
+# Step rotation
+step_rotation: 0.2
+
+# Step joints
+step_joints: 0.2
+
+# Joints delta
+joints_delta_replace: false
+joints_delta_command_type: 'PTPCP'
+joints_delta_velocity_type: 'RAD/S'
+joints_delta_acceleration_type: 'RAD/S^2'
+joints_delta_blending_type: 'M'
+joints_delta_velocity: 0.04
+joints_delta_acceleration: 1.57
+joints_delta_blending: 0.0
+
+# Joints goal
+joints_goal_replace: false
+joints_goal_command_type: 'PTP'
+joints_goal_velocity_type: '%'
+joints_goal_acceleration_type: '%'
+joints_goal_blending_type: '%'
+joints_goal_velocity: 0.1
+joints_goal_acceleration: 1.0
+joints_goal_blending: 0.0
+
+# Cartesian delta
+cartesian_delta_replace: false
+cartesian_delta_command_type: 'LINCP'
+cartesian_delta_velocity_type: 'M/S'
+cartesian_delta_acceleration_type: 'M/S^2'
+cartesian_delta_blending_type: 'M'
+cartesian_delta_velocity: 0.05
+cartesian_delta_acceleration: 1.0
+cartesian_delta_blending: 0.01
+
+# Cartesian goal
+cartesian_goal_replace: false
+cartesian_goal_command_type_rotational_movement: 'PTP'
+cartesian_goal_command_type_translational_movement: 'PTP'
+cartesian_goal_velocity_type: '%'
+cartesian_goal_acceleration_type: '%'
+cartesian_blending_type: '%'
+cartesian_goal_velocity: 0.05
+cartesian_goal_acceleration: 0.02
+cartesian_blending: 0.0
+
+robot_data:
+  fixed_frame: 'manufacturer_base'
+  flange_frame: 'robot_state_tcp'
+  urdf_param: 'robot_description'
+
+# Joint limits
+joint_limits:
+  -
+    min: -170
+    max:  170
+  -
+    min: -100
+    max:  120
+  -
+    min: -200
+    max:  40
+  -
+    min: -270
+    max:  270
+  -
+    min: -130
+    max:  130
+  -
+    min: -400
+    max:  400
